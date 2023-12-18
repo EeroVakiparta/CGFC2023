@@ -86,6 +86,16 @@ class Fish {
         this.saved = saved;
     }
 
+    //compare fish by id
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Fish)) return false;
+        Fish fish = (Fish) o;
+        return fishId == fish.fishId;
+    }
+
+
 }
 
 record Drone(int droneId, Vector pos, boolean dead, int battery, List<Integer> scans) {
@@ -232,6 +242,9 @@ class Player {
             }
 
 
+            //map of drones and their target coordinates
+            Map<Integer, Coordinate> droneTargetCoordinates = new HashMap<>();
+
             for (Drone drone : myDrones) {
                 int x = drone.pos().x();
                 int y = drone.pos().y();
@@ -239,32 +252,29 @@ class Player {
                 int targetY = 5000;
 
 
-                List<Fish> closeFishes = new ArrayList<>();
-                for (Fish fish : visibleFishes) {
-                    if (scannedFishes.stream().anyMatch(f -> f.getFishId() == fish.getFishId())) {
-                        continue;
-                    }
-                    int distance = Math.abs(fish.getPos().x() - x) + Math.abs(fish.getPos().y() - y);
-                    if (distance < 800 && !fish.isSaved()) {
-                        closeFishes.add(fish);
 
-                        System.err.println("Fish is close to drone, adding to list X " + fish.getPos().x() + " Y " + fish.getPos().y());
-                    }
-                }
-                //TODO: make this work with many drones
 
-                scannedFishes.addAll(closeFishes);
 
-                System.err.println("Scanned fishes " + scannedFishes);
 
                 int goToSurface = 0;
+
+                //TODO:  remove useless second for loop
+                for (Fish fish : visibleFishes) {
+                    if (!scannedFishes.contains(fish) && !fish.isSaved()) {
+                        scannedFishes.add(fish);
+                    }
+                }
+
+                //TODO: implement scanned fishes inside the DRONE class !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 
                 ArrayList<Integer> scannedFishIdsForDecidingSurfacing = new ArrayList<>();
                 for (Fish fish : scannedFishes) {
                     if (!fish.isSaved()) {
                         goToSurface = 1;
                         scannedFishIdsForDecidingSurfacing.add(fish.getFishId());
-
+                        //error
+                        System.err.println("Fish is not saved, going to surface" + fish.getFishId());
                     }
                 }
 
@@ -334,12 +344,12 @@ class Player {
 
 
                 //calculate most optimal route to visit all target points in targetPoints list. If no target points left, go to surface.
-                if (coordinatesToVisit.size() > 0 && goToSurface == 0) {
+                if (coordinatesToVisit.size() > 0 ) {
                     int minDistance = Integer.MAX_VALUE;
                     Coordinate closestCoordinate = null;
                     for (Coordinate c : coordinatesToVisit) {
                         int distance = Math.abs(c.x - dronePos.x()) + Math.abs(c.y - dronePos.y());
-                        if (distance < minDistance && !c.isVisited) {
+                        if (distance < minDistance && !c.isVisited && !droneTargetCoordinates.containsValue(c)) {
                             minDistance = distance;
                             closestCoordinate = c;
                         }
@@ -347,7 +357,7 @@ class Player {
                     if(closestCoordinate != null){
                         targetX = closestCoordinate.x;
                         targetY = closestCoordinate.y;
-
+                        droneTargetCoordinates.put(drone.droneId(), closestCoordinate);
                         System.err.println("Drone is setting next target to point X " + targetX + " Y " + targetY);
                     }
 
@@ -393,11 +403,14 @@ class Player {
                     sinceLastLight++;
                 }
 
+
+
                 System.err.println("Light " + light);
-                if (goToSurface == 1) {
-                    System.out.printf("MOVE %d %d %d%n", drone.pos().x(), 499, light);
+                if (goToSurface == 1 ) {
+                    System.out.printf("MOVE %d %d %d%n", drone.pos().x(), 450, light);
                 } else {
                     System.out.printf("MOVE %d %d %d%n", targetX, targetY, light);
+
                 }
             }
         }
