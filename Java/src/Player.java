@@ -3,6 +3,20 @@ import java.util.*;
 record Vector(int x, int y) {
 }
 
+class Coordinate {
+    int x;
+    int y;
+
+    boolean isVisited = false;
+
+    public Coordinate(int x, int y, boolean isVisited) {
+        this.x = x;
+        this.y = y;
+        this.isVisited = isVisited;
+    }
+
+}
+
 record FishDetail(int color, int type) {
 }
 
@@ -84,6 +98,18 @@ class Player {
     public static void main(String[] args) {
         Scanner in = new Scanner(System.in);
 
+
+        //OK OK So the fishes are bound to their habitat! So rada blips are only useful for fine tuning the drone movements.
+        List<Coordinate> coordinatesToVisit = new ArrayList<>();
+
+        for (int i = 1; i < 4; i++) {
+            int dy = 2500 * i + 1000;
+            for (int j = 0; j < 9; j++) {
+                int dx = 1000 * j + 1000;
+                coordinatesToVisit.add(new Coordinate(dx, dy, false));
+            }
+        }
+        int sinceLastLight = 0;
         Map<Integer, FishDetail> fishDetails = new HashMap<>();
         List<Fish> fishes = new ArrayList<>();
         int fishCount = in.nextInt();
@@ -96,7 +122,7 @@ class Player {
         }
 
         List<Fish> scannedFishes = new ArrayList<>();
-        List<Fish> savedFishes = new ArrayList<>();
+
         // game loop
         while (true) {
             List<Integer> myScans = new ArrayList<>();
@@ -114,10 +140,16 @@ class Player {
             for (int i = 0; i < myScanCount; i++) {
                 int fishId = in.nextInt();
                 myScans.add(fishId);
+
+                for(Fish fish : fishes){
+                    if(fish.getFishId() == fishId){
+                        fish.setSaved(true);
+                    }
+                }
             }
             //print out scanned fishes;
             for (Integer fishId : myScans) {
-                System.err.printf("Fish %d was scanned%n", fishId);
+                System.err.printf("Fish %d was saved%n", fishId);
             }
 
             int foeScanCount = in.nextInt();
@@ -188,7 +220,7 @@ class Player {
             }
 
 
-            //check if drone is surfaced
+
             for (Drone drone : myDrones) {
                 if (drone.pos().y() < 500) {
                     System.err.println("drone is surfaced, saving fishies");
@@ -213,24 +245,30 @@ class Player {
                         continue;
                     }
                     int distance = Math.abs(fish.getPos().x() - x) + Math.abs(fish.getPos().y() - y);
-                    if (distance < 800) {
+                    if (distance < 800 && !fish.isSaved()) {
                         closeFishes.add(fish);
+
+                        System.err.println("Fish is close to drone, adding to list X " + fish.getPos().x() + " Y " + fish.getPos().y());
                     }
                 }
                 //TODO: make this work with many drones
 
                 scannedFishes.addAll(closeFishes);
 
+                System.err.println("Scanned fishes " + scannedFishes);
 
                 int goToSurface = 0;
 
-
+                ArrayList<Integer> scannedFishIdsForDecidingSurfacing = new ArrayList<>();
                 for (Fish fish : scannedFishes) {
                     if (!fish.isSaved()) {
                         goToSurface = 1;
-                        break;
+                        scannedFishIdsForDecidingSurfacing.add(fish.getFishId());
+
                     }
                 }
+
+                System.err.println("Scanned fish ids for deciding surfacing " + scannedFishIdsForDecidingSurfacing);
 
                 //TODO: make utils class for this
                 Map<String, Integer> radarBlips = new HashMap<>();
@@ -254,7 +292,7 @@ class Player {
 
                 Vector dronePos = drone.pos();
 
-                //TODO: allow drone to got to corners
+
 
                 if (maxKey.equals("TL")) {
                     if (dronePos.x() - 1000 > 0) {
@@ -293,26 +331,77 @@ class Player {
                 }
 
 
-                System.err.printf("Drone %d is heading to %d %d%n", drone.droneId(), targetX, targetY);
+
+
+                //calculate most optimal route to visit all target points in targetPoints list. If no target points left, go to surface.
+                if (coordinatesToVisit.size() > 0 && goToSurface == 0) {
+                    int minDistance = Integer.MAX_VALUE;
+                    Coordinate closestCoordinate = null;
+                    for (Coordinate c : coordinatesToVisit) {
+                        int distance = Math.abs(c.x - dronePos.x()) + Math.abs(c.y - dronePos.y());
+                        if (distance < minDistance && !c.isVisited) {
+                            minDistance = distance;
+                            closestCoordinate = c;
+                        }
+                    }
+                    if(closestCoordinate != null){
+                        targetX = closestCoordinate.x;
+                        targetY = closestCoordinate.y;
+
+                        System.err.println("Drone is setting next target to point X " + targetX + " Y " + targetY);
+                    }
+
+
+                }
+
+
+                boolean closeToCoordinate = false;
+
+                for (Coordinate c : coordinatesToVisit) {
+                    if(c.isVisited){
+                        continue;
+                    }
+                    int distance = Math.abs(c.x - dronePos.x()) + Math.abs(c.y - dronePos.y());
+                    if (distance < 600) {
+                        //error logging
+                        System.err.println("Drone is close to target point, removing from list X " + c.x + " Y " + c.y);
+                        c.isVisited = true;
+                        closeToCoordinate = true;
+                    }
+                }
+
+
+                System.err.println("Scanned ids " + myScans);
+
+
+
+
+
+                System.err.printf("Drone %d is heading to %d %d ", drone.droneId(), targetX, targetY);
 
                 int light = 0;
 
 
-                if (visibleFishCount > 0) {
+                System.err.println("Drone battery " + drone.battery());
+                if (closeToCoordinate && sinceLastLight > 5) {
                     light = 1;
                     System.err.println("fish close to drone, light time");
                 } else if (drone.battery() == 30) {
                     light = 1;
                 } else {
                     light = 0;
+                    sinceLastLight++;
                 }
 
+                System.err.println("Light " + light);
                 if (goToSurface == 1) {
-                    System.out.printf("MOVE %d %d %d%n", drone.pos().x(), 0, light);
+                    System.out.printf("MOVE %d %d %d%n", drone.pos().x(), 499, light);
                 } else {
                     System.out.printf("MOVE %d %d %d%n", targetX, targetY, light);
                 }
             }
         }
     }
+
+
 }
